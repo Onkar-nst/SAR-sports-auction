@@ -115,7 +115,14 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
       try {
         const res = await fetch(`/api/rooms/${roomId}?t=${Date.now()}`, { cache: 'no-store' });
         const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        if (data.error) {
+          if (data.error === 'Room not found') {
+            console.warn('Room not found on server, returning to landing page.');
+            onLeave();
+            return;
+          }
+          throw new Error(data.error);
+        }
         if (active) setRoomState(data.room);
       } catch (err) {
         console.error('Error fetching room state:', err);
@@ -561,6 +568,64 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
             {roomState.playerIdx + 1}/{roomState.players.length} players
           </div>
           <button className="btn bs bsm" onClick={onLeave} style={{ padding: '4px 10px' }}>Leave</button>
+
+          {/* Logged in User Profile Box */}
+          {(() => {
+            const isAdminUser = userName.toLowerCase().trim() === 'admin' || userName.toLowerCase().trim() === 'admin@sportsauction.com' || userId.toLowerCase().trim() === 'admin' || userId.toLowerCase().trim() === 'admin@sportsauction.com';
+            return (
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  padding: '4px 8px',
+                  borderRadius: '10px',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
+                  backdropFilter: 'blur(8px)',
+                  cursor: 'default'
+                }}
+              >
+                <div style={{
+                  position: 'relative',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  background: isAdminUser ? 'linear-gradient(135deg, var(--am) 0%, #d97706 100%)' : 'linear-gradient(135deg, var(--g) 0%, #00a854 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#000',
+                  textTransform: 'uppercase',
+                  boxShadow: isAdminUser ? '0 0 6px rgba(245,158,11,0.2)' : '0 0 6px rgba(0,220,114,0.2)'
+                }}>
+                  {userName.charAt(0)}
+                  <span style={{
+                    position: 'absolute',
+                    bottom: -1,
+                    right: -1,
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: '#00DC72',
+                    border: '1px solid var(--bg)',
+                    boxShadow: '0 0 3px #00DC72'
+                  }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', textAlign: 'left' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--t1)', fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>
+                    {userName}
+                  </span>
+                  <span style={{ fontSize: '8px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.6px', fontFamily: "'Rajdhani', sans-serif" }}>
+                    {isAdminUser ? '🛡️ Admin' : '👤 User'}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

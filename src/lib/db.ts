@@ -16,6 +16,10 @@ const DB_FILE = IS_VERCEL
   ? path.join(os.tmpdir(), 'sports-auction-db.json')
   : path.join(process.cwd(), 'src', 'lib', 'db.json');
 
+const USERS_FILE = IS_VERCEL
+  ? path.join(os.tmpdir(), 'sports-auction-users.json')
+  : path.join(process.cwd(), 'src', 'lib', 'users.json');
+
 const KV_URL = process.env.KV_REST_API_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 
@@ -37,16 +41,219 @@ export function getDeterministicUuid(str: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(12, 15)}-8${hash.slice(15, 18)}-${hash.slice(18, 30)}`;
 }
 
+// --- Local Users File Storage Helper Functions ---
+async function ensureUsersFile() {
+  try {
+    await fs.access(USERS_FILE);
+  } catch {
+    try {
+      await fs.mkdir(path.dirname(USERS_FILE), { recursive: true });
+      await fs.writeFile(USERS_FILE, JSON.stringify({}, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Failed to initialize local users file:', err);
+    }
+  }
+}
+
+async function localReadUsers(): Promise<Record<string, any>> {
+  await ensureUsersFile();
+  try {
+    const data = await fs.readFile(USERS_FILE, 'utf-8');
+    return JSON.parse(data || '{}');
+  } catch (err) {
+    console.error('Error reading local users database:', err);
+    return {};
+  }
+}
+
+async function localWriteUsers(data: Record<string, any>): Promise<void> {
+  await ensureUsersFile();
+  try {
+    await fs.writeFile(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing local users database:', err);
+  }
+}
+
+// --- User Hashing and DB Query Methods ---
+export function hashPassword(password: string): string {
+  return createHash('sha256').update(password).digest('hex');
+}
+
+export async function getUserByEmail(email: string): Promise<any | null> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const localUsers = await localReadUsers();
+  const localUser = localUsers[normalizedEmail];
+
+  let dbUser = null;
+  if (checkSupabase()) {
+    try {
+      const { data, error } = await (supabase!.from('users') as any)
+        .select('*')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) dbUser = data;
+    } catch (e) {
+      console.warn('⚠️ Supabase getUserByEmail failed, falling back to local users DB:', e);
+      isSupabaseHealthy = false;
+    }
+  }
+
+  const finalUser = dbUser || localUser || null;
+  if (!finalUser) return null;
+
+  return {
+    ...finalUser,
+    active: localUser?.active !== undefined ? localUser.active : true,
+    password_hash: finalUser.password_hash || localUser?.password_hash,
+    created_at: localUser?.created_at || finalUser.created_at || new Date().toISOString()
+  };
+}
+
+export async function createUser(email: string, passwordHash: string, name: string): Promise<any> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const dbUserId = getDeterministicUuid(normalizedEmail);
+  const newUser = {
+    id: dbUserId,
+    email: normalizedEmail,
+    name: name || normalizedEmail,
+    password_hash: passwordHash,
+    active: true,
+    created_at: new Date().toISOString()
+  };
+
+  // Always write locally to keep active flag and created_at metadata sync
+  try {
+    const localUsers = await localReadUsers();
+    localUsers[normalizedEmail] = {
+      ...localUsers[normalizedEmail],
+      ...newUser
+    };
+    await localWriteUsers(localUsers);
+  } catch (err) {
+    console.error('Failed to sync user to local users database:', err);
+  }
+
+  if (checkSupabase()) {
+    try {
+      const { error } = await (supabase!.from('users') as any)
+        .upsert([{
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          password_hash: newUser.password_hash
+        }]);
+      if (error) throw error;
+      return newUser;
+    } catch (e) {
+      console.warn('⚠️ Supabase createUser failed, returning local user:', e);
+      isSupabaseHealthy = false;
+    }
+  }
+
+  return newUser;
+}
+
+export async function getAllUsers(): Promise<any[]> {
+  const localUsers = await localReadUsers();
+
+  if (checkSupabase()) {
+    try {
+      const { data, error } = await (supabase!.from('users') as any).select('*');
+      if (error) throw error;
+      
+      const merged = (data || []).map((u: any) => {
+        const emailKey = u.email.toLowerCase().trim();
+        const local = localUsers[emailKey] || {};
+        return {
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          password_hash: u.password_hash || local.password_hash,
+          active: local.active !== undefined ? local.active : true,
+          created_at: local.created_at || u.created_at || new Date().toISOString()
+        };
+      });
+      return merged;
+    } catch (e) {
+      console.warn('⚠️ Supabase getAllUsers failed, falling back to local users DB:', e);
+      isSupabaseHealthy = false;
+    }
+  }
+
+  return Object.values(localUsers).map((u: any) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    password_hash: u.password_hash,
+    active: u.active !== undefined ? u.active : true,
+    created_at: u.created_at || new Date().toISOString()
+  }));
+}
+
+export async function toggleUserActive(userIdOrEmail: string, active: boolean): Promise<void> {
+  const normalized = userIdOrEmail.toLowerCase().trim();
+  const email = normalized.includes('@') ? normalized : `${normalized}@sportsauction.com`;
+  
+  try {
+    const localUsers = await localReadUsers();
+    if (localUsers[email]) {
+      localUsers[email].active = active;
+    } else {
+      const dbUserId = getDeterministicUuid(email);
+      let name = userIdOrEmail;
+      if (checkSupabase()) {
+        try {
+          const { data } = await (supabase!.from('users') as any).select('*').eq('email', email).maybeSingle();
+          if (data) name = data.name;
+        } catch {}
+      }
+      localUsers[email] = {
+        id: dbUserId,
+        email: email,
+        name: name,
+        active: active,
+        created_at: new Date().toISOString()
+      };
+    }
+    await localWriteUsers(localUsers);
+  } catch (err) {
+    console.error('Failed to toggle user active state:', err);
+  }
+}
+
 // Dynamically seed users table for relational references
 export async function ensureUserExists(userId: string, name: string) {
   const dbUserId = getDeterministicUuid(userId);
-  const { data } = await (supabase as any).from('users').select('id').eq('id', dbUserId).single();
-  if (!data) {
-    await (supabase!.from('users') as any).insert([{
+  const normalizedEmail = userId.toLowerCase().trim();
+
+  if (checkSupabase()) {
+    try {
+      const { data } = await (supabase as any).from('users').select('id').eq('id', dbUserId).maybeSingle();
+      if (!data) {
+        await (supabase!.from('users') as any).insert([{
+          id: dbUserId,
+          email: userId,
+          name: name || 'Guest User'
+        }]);
+      }
+      return dbUserId;
+    } catch (e) {
+      console.warn('⚠️ Supabase ensureUserExists failed, falling back to local users DB:', e);
+      isSupabaseHealthy = false;
+    }
+  }
+
+  // Local fallback
+  const localUsers = await localReadUsers();
+  if (!localUsers[normalizedEmail]) {
+    localUsers[normalizedEmail] = {
       id: dbUserId,
-      email: userId, // store original custom userId in email column
+      email: userId,
       name: name || 'Guest User'
-    }]);
+    };
+    await localWriteUsers(localUsers);
   }
   return dbUserId;
 }

@@ -13,6 +13,7 @@ import Spinner from '@/components/ui/Spinner';
 
 interface CreateRoomProps {
   userId: string;
+  userName?: string;
   onLaunch: (roomId: string, teamId: string, userName: string) => void;
   onBack: () => void;
 }
@@ -80,7 +81,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export default function CreateRoom({ userId, onLaunch, onBack }: CreateRoomProps) {
+export default function CreateRoom({ userId, userName, onLaunch, onBack }: CreateRoomProps) {
   const [step, setStep] = useState(1);
   const [roomId] = useState(() => `AUC-${Math.floor(1000 + Math.random() * 9000)}`);
   // Use state for 'now' so it's only set client-side, preventing SSR hydration mismatch
@@ -278,12 +279,70 @@ export default function CreateRoom({ userId, onLaunch, onBack }: CreateRoomProps
     { n: 3, l: 'Launch' },
   ];
 
+  const displayUserName = userName || userId;
+  const isAdminUser = displayUserName.toLowerCase().trim() === 'admin' || displayUserName.toLowerCase().trim() === 'admin@sportsauction.com' || userId.toLowerCase().trim() === 'admin' || userId.toLowerCase().trim() === 'admin@sportsauction.com';
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '13px 36px', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: 'var(--g)', letterSpacing: 2 }}>SAR</span>
-        <span style={{ color: 'var(--t3)' }}>/</span>
-        <span style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, color: 'var(--t2)' }}>Create Auction Room</span>
+      <div style={{ padding: '13px 36px', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: 'var(--g)', letterSpacing: 2 }}>SAR</span>
+          <span style={{ color: 'var(--t3)' }}>/</span>
+          <span style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, color: 'var(--t2)' }}>Create Auction Room</span>
+        </div>
+
+        {/* Logged in User Profile Box */}
+        <div 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '6px 12px',
+            borderRadius: '12px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+            backdropFilter: 'blur(8px)',
+            cursor: 'default'
+          }}
+        >
+          <div style={{
+            position: 'relative',
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            background: isAdminUser ? 'linear-gradient(135deg, var(--am) 0%, #d97706 100%)' : 'linear-gradient(135deg, var(--g) 0%, #00a854 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: '#000',
+            textTransform: 'uppercase',
+            boxShadow: isAdminUser ? '0 0 10px rgba(245,158,11,0.3)' : '0 0 10px rgba(0,220,114,0.3)'
+          }}>
+            {displayUserName.charAt(0)}
+            <span style={{
+              position: 'absolute',
+              bottom: -1,
+              right: -1,
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: '#00DC72',
+              border: '1px solid var(--bg)',
+              boxShadow: '0 0 4px #00DC72'
+            }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', textAlign: 'left' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)', fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>
+              {displayUserName}
+            </span>
+            <span style={{ fontSize: '9px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.8px', fontFamily: "'Rajdhani', sans-serif" }}>
+              {isAdminUser ? '🛡️ Admin' : '👤 Participant'}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '32px 18px' }}>

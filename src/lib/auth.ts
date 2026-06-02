@@ -7,14 +7,11 @@ export interface ManagedUser {
 
 export interface AuthSession {
   userId: string;
+  userName: string;
   isAdmin: boolean;
   loggedInAt: number;
 }
 
-export const ADMIN_CREDENTIALS = {
-  userId: 'admin',
-  password: 'kola@ipl',
-} as const;
 
 export const STORAGE_KEYS = {
   guestUserId: 'sar_user_id',

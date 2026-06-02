@@ -134,7 +134,7 @@ export default function Landing({
           setNews(data.headlines);
         }
       })
-      .catch(err => console.error('Failed to load news ticker:', err));
+      .catch(err => console.warn('Failed to load news ticker:', err));
   }, []);
 
   useEffect(() => {
@@ -144,7 +144,7 @@ export default function Landing({
         .then(data => {
           if (data.history) setHistory(data.history);
         })
-        .catch(err => console.error(err));
+        .catch(err => console.warn('Failed to load rooms history:', err));
     }
   }, [userId]);
 
@@ -241,14 +241,14 @@ export default function Landing({
     openLogin('host');
   }
 
-  function submitLogin() {
+  async function submitLogin() {
     if (!loginForm.userId.trim() || !loginForm.password.trim()) {
       setLoginError('Enter both user ID and password');
       return;
     }
 
     try {
-      onLogin(loginForm.userId, loginForm.password);
+      await onLogin(loginForm.userId, loginForm.password);
       closeLogin();
       if (loginIntent === 'host') {
         onStart();
@@ -258,17 +258,17 @@ export default function Landing({
     }
   }
 
-  function submitManagedUser() {
+  async function submitManagedUser() {
     if (!settingsForm.userId.trim() || !settingsForm.password.trim()) {
       setSettingsError('Add both a user ID and password');
       return;
     }
 
     try {
-      onCreateUser(settingsForm.userId, settingsForm.password);
+      await onCreateUser(settingsForm.userId, settingsForm.password);
       setSettingsForm({ userId: '', password: '' });
       setSettingsError('');
-      setSettingsMessage(`User ${settingsForm.userId.trim().toLowerCase()} created and activated`);
+      setSettingsMessage(`User ${settingsForm.userId.trim().toLowerCase()} created successfully`);
     } catch (e: unknown) {
       setSettingsMessage('');
       setSettingsError(e instanceof Error ? e.message : 'Failed to create user');
@@ -324,7 +324,7 @@ export default function Landing({
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
           <button className="btn bs bsm" onClick={() => setShowJoin(true)}>Join Room</button>
           {authSession ? (
             <>
@@ -333,6 +333,61 @@ export default function Landing({
               )}
               <button className="btn bp bsm" onClick={onStart}>Create Room</button>
               <button className="btn bs bsm" onClick={onLogout}>Logout</button>
+              
+              {/* Logged in User Profile Box */}
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  padding: '6px 12px',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+                  backdropFilter: 'blur(8px)',
+                  transition: 'all 0.3s ease',
+                  cursor: 'default',
+                  marginLeft: 6
+                }}
+              >
+                <div style={{
+                  position: 'relative',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: authSession.isAdmin ? 'linear-gradient(135deg, var(--am) 0%, #d97706 100%)' : 'linear-gradient(135deg, var(--g) 0%, #00a854 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#000',
+                  textTransform: 'uppercase',
+                  boxShadow: authSession.isAdmin ? '0 0 10px rgba(245,158,11,0.3)' : '0 0 10px rgba(0,220,114,0.3)'
+                }}>
+                  {(authSession.userName || authSession.userId).charAt(0)}
+                  <span style={{
+                    position: 'absolute',
+                    bottom: -1,
+                    right: -1,
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: '#00DC72',
+                    border: '1px solid var(--bg)',
+                    boxShadow: '0 0 4px #00DC72'
+                  }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', textAlign: 'left' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)', fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>
+                    {authSession.userName || authSession.userId}
+                  </span>
+                  <span style={{ fontSize: '9px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.8px', fontFamily: "'Rajdhani', sans-serif" }}>
+                    {authSession.isAdmin ? '🛡️ Admin' : '👤 Participant'}
+                  </span>
+                </div>
+              </div>
             </>
           ) : (
             <button className="btn bp bsm" onClick={() => openLogin('nav')}>Login</button>
@@ -623,20 +678,7 @@ export default function Landing({
                 </div>
               </div>
 
-              <div className="card" style={{ padding: 18 }}>
-                <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 1.5, marginBottom: 14 }}>ADMIN ACCOUNT</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, background: 'var(--bg3)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: 10, padding: 14 }}>
-                    <div>
-                      <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 16, color: 'var(--t1)' }}>admin</div>
-                      <div style={{ color: 'var(--t3)', fontSize: 12 }}>Reserved account for settings access</div>
-                    </div>
-                    <span className="tag" style={{ background: 'rgba(245,158,11,0.1)', color: 'var(--am)' }}>
-                      Always Active
-                    </span>
-                  </div>
-                </div>
-              </div>
+
             </div>
 
             {(settingsError || settingsMessage) && (
