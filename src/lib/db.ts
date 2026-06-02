@@ -56,17 +56,45 @@ async function ensureUsersFile() {
 }
 
 async function localReadUsers(): Promise<Record<string, any>> {
-  await ensureUsersFile();
-  try {
-    const data = await fs.readFile(USERS_FILE, 'utf-8');
-    return JSON.parse(data || '{}');
-  } catch (err) {
-    console.error('Error reading local users database:', err);
-    return {};
+  let users: Record<string, any> = {};
+  if (KV_URL && KV_TOKEN) {
+    try {
+      const result = await kvFetch(['GET', 'sports-auction:users']);
+      if (result) users = JSON.parse(result);
+    } catch {}
+  } else {
+    await ensureUsersFile();
+    try {
+      const data = await fs.readFile(USERS_FILE, 'utf-8');
+      users = JSON.parse(data || '{}');
+    } catch (err) {
+      console.error('Error reading local users database:', err);
+    }
   }
+
+  // Pre-seed default admin credentials so login works immediately
+  const adminEmail = 'admin@sportsauction.com';
+  if (!users[adminEmail]) {
+    users[adminEmail] = {
+      id: '3f4152f4-dfb9-44ab-83f0-8e23366bf4bd',
+      email: adminEmail,
+      name: 'admin',
+      // Hash of 'adminpassword2026'
+      password_hash: 'e35f704b7cff61dbb3aadb8fb1461c388ec4aee66fc7a86a0f2e7dfaccc75e83',
+      active: true,
+      created_at: new Date().toISOString()
+    };
+  }
+  return users;
 }
 
 async function localWriteUsers(data: Record<string, any>): Promise<void> {
+  if (KV_URL && KV_TOKEN) {
+    try {
+      await kvFetch(['SET', 'sports-auction:users', JSON.stringify(data)]);
+      return;
+    } catch {}
+  }
   await ensureUsersFile();
   try {
     await fs.writeFile(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
@@ -85,29 +113,13 @@ export async function getUserByEmail(email: string): Promise<any | null> {
   const localUsers = await localReadUsers();
   const localUser = localUsers[normalizedEmail];
 
-  let dbUser = null;
-  if (checkSupabase()) {
-    try {
-      const { data, error } = await (supabase!.from('users') as any)
-        .select('*')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
-      if (error) throw error;
-      if (data) dbUser = data;
-    } catch (e) {
-      console.warn('⚠️ Supabase getUserByEmail failed, falling back to local users DB:', e);
-      isSupabaseHealthy = false;
-    }
-  }
-
-  const finalUser = dbUser || localUser || null;
-  if (!finalUser) return null;
+  if (!localUser) return null;
 
   return {
-    ...finalUser,
-    active: localUser?.active !== undefined ? localUser.active : true,
-    password_hash: finalUser.password_hash || localUser?.password_hash,
-    created_at: localUser?.created_at || finalUser.created_at || new Date().toISOString()
+    ...localUser,
+    active: localUser.active !== undefined ? localUser.active : true,
+    password_hash: localUser.password_hash,
+    created_at: localUser.created_at || new Date().toISOString()
   };
 }
 
@@ -123,7 +135,6 @@ export async function createUser(email: string, passwordHash: string, name: stri
     created_at: new Date().toISOString()
   };
 
-  // Always write locally to keep active flag and created_at metadata sync
   try {
     const localUsers = await localReadUsers();
     localUsers[normalizedEmail] = {
@@ -135,53 +146,11 @@ export async function createUser(email: string, passwordHash: string, name: stri
     console.error('Failed to sync user to local users database:', err);
   }
 
-  if (checkSupabase()) {
-    try {
-      const { error } = await (supabase!.from('users') as any)
-        .upsert([{
-          id: newUser.id,
-          email: newUser.email,
-          name: newUser.name,
-          password_hash: newUser.password_hash
-        }]);
-      if (error) throw error;
-      return newUser;
-    } catch (e) {
-      console.warn('⚠️ Supabase createUser failed, returning local user:', e);
-      isSupabaseHealthy = false;
-    }
-  }
-
   return newUser;
 }
 
 export async function getAllUsers(): Promise<any[]> {
   const localUsers = await localReadUsers();
-
-  if (checkSupabase()) {
-    try {
-      const { data, error } = await (supabase!.from('users') as any).select('*');
-      if (error) throw error;
-      
-      const merged = (data || []).map((u: any) => {
-        const emailKey = u.email.toLowerCase().trim();
-        const local = localUsers[emailKey] || {};
-        return {
-          id: u.id,
-          email: u.email,
-          name: u.name,
-          password_hash: u.password_hash || local.password_hash,
-          active: local.active !== undefined ? local.active : true,
-          created_at: local.created_at || u.created_at || new Date().toISOString()
-        };
-      });
-      return merged;
-    } catch (e) {
-      console.warn('⚠️ Supabase getAllUsers failed, falling back to local users DB:', e);
-      isSupabaseHealthy = false;
-    }
-  }
-
   return Object.values(localUsers).map((u: any) => ({
     id: u.id,
     email: u.email,
@@ -203,12 +172,6 @@ export async function toggleUserActive(userIdOrEmail: string, active: boolean): 
     } else {
       const dbUserId = getDeterministicUuid(email);
       let name = userIdOrEmail;
-      if (checkSupabase()) {
-        try {
-          const { data } = await (supabase!.from('users') as any).select('*').eq('email', email).maybeSingle();
-          if (data) name = data.name;
-        } catch {}
-      }
       localUsers[email] = {
         id: dbUserId,
         email: email,
@@ -239,9 +202,8 @@ export async function ensureUserExists(userId: string, name: string) {
         }]);
       }
       return dbUserId;
-    } catch (e) {
-      console.warn('⚠️ Supabase ensureUserExists failed, falling back to local users DB:', e);
-      isSupabaseHealthy = false;
+    } catch (e: any) {
+      console.warn('⚠️ Supabase ensureUserExists failed (silently falling back):', e?.message || e);
     }
   }
 
@@ -251,7 +213,9 @@ export async function ensureUserExists(userId: string, name: string) {
     localUsers[normalizedEmail] = {
       id: dbUserId,
       email: userId,
-      name: name || 'Guest User'
+      name: name || 'Guest User',
+      active: true,
+      created_at: new Date().toISOString()
     };
     await localWriteUsers(localUsers);
   }
@@ -390,10 +354,10 @@ export async function getRoom(roomId: string): Promise<ServerRoom | null> {
         return dbTeamId;
       };
 
-      // Fetch user details for mapping back original user ID strings (from email column)
-      const { data: dbUsers } = await (supabase!.from('users') as any).select('id, email, name');
-      const userMap = new Map(dbUsers?.map((u: any) => [u.id, u.email || u.name]) || []);
-      const userDisplayNameMap = new Map(dbUsers?.map((u: any) => [u.id, u.name]) || []);
+      // Fetch user details from local database for mapping
+      const localUsers = await localReadUsers();
+      const userMap = new Map(Object.values(localUsers).map((u: any) => [u.id, u.email || u.name]));
+      const userDisplayNameMap = new Map(Object.values(localUsers).map((u: any) => [u.id, u.name]));
 
       const mappedParticipants = teams.map(t => ({
         id: getOriginalTeamId(t.id),

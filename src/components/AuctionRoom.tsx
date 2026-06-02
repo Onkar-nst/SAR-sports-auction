@@ -112,6 +112,9 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
     let active = true;
 
     async function fetchState() {
+      if (typeof window !== 'undefined' && !window.navigator.onLine) {
+        return;
+      }
       try {
         const res = await fetch(`/api/rooms/${roomId}?t=${Date.now()}`, { cache: 'no-store' });
         const data = await res.json();
@@ -124,8 +127,12 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
           throw new Error(data.error);
         }
         if (active) setRoomState(data.room);
-      } catch (err) {
-        console.error('Error fetching room state:', err);
+      } catch (err: any) {
+        if (err instanceof TypeError || (err.message && err.message.includes('fetch'))) {
+          console.warn('Network issue fetching room state:', err.message);
+        } else {
+          console.error('Error fetching room state:', err);
+        }
       }
     }
 
@@ -193,6 +200,10 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
         // When timer hits 0, ping server once to process phase transition (sold/unsold/next)
         if (left === 0 && !transitionRef.current && (roomState.phase === 'bidding' || roomState.phase === 'sold' || roomState.phase === 'unsold')) {
           transitionRef.current = true;
+          if (typeof window !== 'undefined' && !window.navigator.onLine) {
+            transitionRef.current = false;
+            return;
+          }
           fetch(`/api/rooms/${roomState.id}?t=${Date.now()}`, { cache: 'no-store' })
             .then(res => res.json())
             .then(data => {
