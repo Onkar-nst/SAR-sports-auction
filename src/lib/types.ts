@@ -67,6 +67,7 @@ export interface ServerRoom extends AuctionState {
   budget: number;
   squadSize: number;
   enableBots: boolean;
+  timerDuration: number;
   endsAt: number | null;
   scheduledAt?: number | null;
   hostId?: string;
@@ -88,4 +89,5 @@ export interface RoomConfig {
   participants: number;
   budget: number;
   squadSize: number;
+  timerDuration: number;
 }

@@ -95,6 +95,7 @@ export default function CreateRoom({ userId, userName, onLaunch, onBack }: Creat
     budget: 1500,
     squadSize: 11,
     enableBots: true,
+    timerDuration: 60,
   });
   const [players, setPlayers] = useState<Player[]>(() => getPlayersForSport('Cricket / IPL'));
   const [hostTeamName, setHostTeamName] = useState('Your Team');
@@ -409,12 +410,20 @@ export default function CreateRoom({ userId, userName, onLaunch, onBack }: Creat
                     </Field>
                   </div>
 
-                  <Field label="CPU Bots Bidding">
-                    <select className="inp" value={cfg.enableBots ? 'Enabled' : 'Disabled'} onChange={(e) => setCfg({ ...cfg, enableBots: e.target.value === 'Enabled' })}>
-                      <option value="Enabled">Enabled (Bots bid automatically)</option>
-                      <option value="Disabled">Disabled (Only real players bid)</option>
-                    </select>
-                  </Field>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <Field label="CPU Bots Bidding">
+                      <select className="inp" value={cfg.enableBots ? 'Enabled' : 'Disabled'} onChange={(e) => setCfg({ ...cfg, enableBots: e.target.value === 'Enabled' })}>
+                        <option value="Enabled">Enabled (Bots bid automatically)</option>
+                        <option value="Disabled">Disabled (Only real players bid)</option>
+                      </select>
+                    </Field>
+                    <Field label="Timer Duration">
+                      <select className="inp" value={cfg.timerDuration} onChange={(e) => setCfg({ ...cfg, timerDuration: parseInt(e.target.value, 10) })}>
+                        <option value={30}>30 Seconds</option>
+                        <option value={60}>60 Seconds</option>
+                      </select>
+                    </Field>
+                  </div>
 
                   <div className="card" style={{ padding: 18, border: '1px solid rgba(0,220,114,0.14)', background: 'rgba(0,220,114,0.04)' }}>
                     <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 1.5, marginBottom: 12 }}>HOST TEAM</div>
@@ -452,8 +461,8 @@ export default function CreateRoom({ userId, userName, onLaunch, onBack }: Creat
                   </div>
 
                   <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '12px 16px', border: '1px solid var(--bd2)', fontSize: 14, color: 'var(--t2)', lineHeight: 1.5 }}>
-                    ⏱️ Timer fixed at <b style={{ color: 'var(--g)' }}>60 seconds</b> per player.<br />
-                    Every bid extends the clock by <b style={{ color: 'var(--am)' }}>20 seconds</b> (max 60s).
+                    ⏱️ Timer fixed at <b style={{ color: 'var(--g)' }}>{cfg.timerDuration} seconds</b> per player.<br />
+                    Every bid extends the clock by <b style={{ color: 'var(--am)' }}>{cfg.timerDuration === 30 ? 10 : 20} seconds</b> (max {cfg.timerDuration}s).
                   </div>
                 </div>
               </div>
@@ -541,9 +550,14 @@ export default function CreateRoom({ userId, userName, onLaunch, onBack }: Creat
                   <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 2 }}>
                     PLAYER POOL
                   </div>
-                  <span style={{ color: 'var(--g)', fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, fontSize: 14 }}>
-                    {cfg.sport} · {players.length} players
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {players.length > 0 && (
+                      <button onClick={() => { if(confirm('Are you sure you want to clear all players?')) setPlayers([]); }} style={{ background: 'none', border: 'none', color: 'var(--re)', cursor: 'pointer', fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>Clear All</button>
+                    )}
+                    <span style={{ color: 'var(--g)', fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, fontSize: 14 }}>
+                      {cfg.sport} · {players.length} players
+                    </span>
+                  </div>
                 </div>
                 <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {players.map((player, index) => (
@@ -605,7 +619,7 @@ export default function CreateRoom({ userId, userName, onLaunch, onBack }: Creat
                       ['🏏', cfg.sport],
                       ['💰', `₹${cfg.budget}L per team`],
                       ['📋', `${players.length} players`],
-                      ['⏱️', '60s timer · +20s per bid'],
+                      ['⏱️', `${cfg.timerDuration}s timer · +${cfg.timerDuration === 30 ? 10 : 20}s per bid`],
                     ].map(([icon, value]) => (
                       <div key={value} style={{ background: 'var(--bg3)', padding: '10px 13px', borderRadius: 8, border: '1px solid var(--bd)', fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, color: 'var(--t1)', fontSize: 13 }}>
                         {icon} {value}
@@ -747,6 +761,7 @@ export default function CreateRoom({ userId, userName, onLaunch, onBack }: Creat
                             budget: cfg.budget,
                             squadSize: cfg.squadSize,
                             enableBots: cfg.enableBots,
+                            timerDuration: cfg.timerDuration,
                             teams,
                             players,
                             hostId: userId,

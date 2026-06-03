@@ -45,6 +45,8 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
   const [timeToStart, setTimeToStart] = useState<number>(0);
   const [launchOverlay, setLaunchOverlay] = useState<number | string | null>(null);
   const lastPhaseRef = useRef<string | null>(null);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editingTeamName, setEditingTeamName] = useState('');
 
   const formatTimeToStart = (ms: number) => {
     if (ms <= 0) return '00:00:00';
@@ -388,6 +390,32 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
     }
   }
 
+  async function handleSaveTeamName(targetTeamId: string) {
+    if (!editingTeamName.trim() || !roomState) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: { type: 'RENAME_TEAM', targetTeamId, newName: editingTeamName },
+          userId,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      } else {
+        setRoomState(data.room);
+        setEditingTeamId(null);
+      }
+    } catch (err) {
+      console.error('Failed to rename team:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (!roomState) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
@@ -413,7 +441,66 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
             <span style={{ color: 'var(--t3)' }}>/</span>
             <span style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, color: 'var(--t2)' }}>Lobby - {roomState.name}</span>
           </div>
-          <button className="btn bs bsm" onClick={onLeave}>Leave Room</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn bs bsm" onClick={onLeave}>Leave Room</button>
+            {/* Logged in User Profile Box */}
+            {(() => {
+              const isAdminUser = userName.toLowerCase().trim() === 'admin' || userName.toLowerCase().trim() === 'admin@sportsauction.com' || userId.toLowerCase().trim() === 'admin' || userId.toLowerCase().trim() === 'admin@sportsauction.com';
+              return (
+                <div 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    padding: '4px 8px',
+                    borderRadius: '10px',
+                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
+                    backdropFilter: 'blur(8px)',
+                    cursor: 'default'
+                  }}
+                >
+                  <div style={{
+                    position: 'relative',
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: isAdminUser ? 'linear-gradient(135deg, var(--am) 0%, #d97706 100%)' : 'linear-gradient(135deg, var(--g) 0%, #00a854 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#000',
+                    textTransform: 'uppercase',
+                    boxShadow: isAdminUser ? '0 0 6px rgba(245,158,11,0.2)' : '0 0 6px rgba(0,220,114,0.2)'
+                  }}>
+                    {userName.charAt(0)}
+                    <span style={{
+                      position: 'absolute',
+                      bottom: -1,
+                      right: -1,
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: '#00DC72',
+                      border: '1px solid var(--bg)',
+                      boxShadow: '0 0 3px #00DC72'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', textAlign: 'left' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--t1)', fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>
+                      {userName}
+                    </span>
+                    <span style={{ fontSize: '8px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.6px', fontFamily: "'Rajdhani', sans-serif" }}>
+                      {isAdminUser ? '🛡️ Admin' : '👤 User'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
 
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20, padding: 24, maxWidth: 1100, width: '100%', margin: '0 auto', overflow: 'hidden', minHeight: 0 }}>
@@ -428,11 +515,41 @@ export default function AuctionRoom({ roomId, userId, teamId, userName, onLeave 
                     <div key={p.id} className="card hover-lift" style={{ padding: 12, border: `1px solid ${p.color}${isUserTeam ? '' : '33'}`, background: isUserTeam ? `${p.color}08` : 'var(--bg3)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Avatar name={p.name} size={36} color={p.color} photo={p.photo} />
-                        <div style={{ overflow: 'hidden' }}>
-                          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 14, color: p.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                          <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>
-                            {getParticipantStatus(p.ownerId)}
-                          </div>
+                        <div style={{ overflow: 'hidden', flex: 1 }}>
+                          {editingTeamId === p.id ? (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <input 
+                                className="inp" 
+                                autoFocus
+                                value={editingTeamName} 
+                                onChange={(e) => setEditingTeamName(e.target.value)} 
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTeamName(p.id); if (e.key === 'Escape') setEditingTeamId(null); }}
+                                style={{ fontSize: 13, padding: '4px 8px', height: 26, width: '100%' }}
+                              />
+                              <button className="btn bp bsm" onClick={() => handleSaveTeamName(p.id)} style={{ padding: '4px 8px', height: 26 }} disabled={submitting}>✓</button>
+                              <button className="btn bs bsm" onClick={() => setEditingTeamId(null)} style={{ padding: '4px 8px', height: 26 }} disabled={submitting}>✕</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ overflow: 'hidden' }}>
+                                <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 14, color: p.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                                <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>
+                                  {getParticipantStatus(p.ownerId)}
+                                </div>
+                              </div>
+                              {isHost && (
+                                <button 
+                                  onClick={() => { setEditingTeamId(p.id); setEditingTeamName(p.name); }} 
+                                  style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 6, cursor: 'pointer', padding: '4px 6px', fontSize: 12, flexShrink: 0, transition: 'all 0.2s', opacity: 0.7 }}
+                                  title="Edit Team Name"
+                                  onMouseOver={(e) => (e.currentTarget.style.opacity = '1')}
+                                  onMouseOut={(e) => (e.currentTarget.style.opacity = '0.7')}
+                                >
+                                  ✏️
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

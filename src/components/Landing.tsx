@@ -31,7 +31,7 @@ interface JoinRoomDetails {
 }
 
 const FEATURES = [
-  ['⚡', 'Live Bidding', '60s countdown — every bid adds +20 seconds to the clock'],
+  ['⚡', 'Live Bidding', 'Choose 30s or 60s timer — bids dynamically extend the clock'],
   ['🔍', 'AI Player Scout', 'Search any player name or URL; AI fetches role, country & base price'],
   ['📁', 'Smart Upload', 'Import from Excel (.xlsx) — columns auto-detected'],
   ['📄', 'PDF Parsing', 'Upload a PDF squad list; AI extracts all players automatically'],

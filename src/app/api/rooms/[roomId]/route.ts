@@ -77,7 +77,7 @@ function updateRoomStatus(room: ServerRoom): boolean {
       room.playerIdx = ni;
       room.currentBid = room.players[ni].base;
       room.currentBidder = null;
-      room.endsAt = now + BID_TIMER_MS;
+      room.endsAt = now + ((room.timerDuration || 60) * 1000);
     }
     changed = true;
   }
@@ -121,7 +121,9 @@ function processBotBidding(room: ServerRoom): boolean {
   if (nextBidAmount <= maxW && nextBidAmount <= (botTeam.budget - botTeam.spent)) {
     room.currentBid = nextBidAmount;
     room.currentBidder = botTeam.id;
-    room.endsAt = Math.min(room.endsAt + BID_EXTENSION_MS, now + BID_TIMER_MS);
+    const timerMs = (room.timerDuration || 60) * 1000;
+    const extensionMs = room.timerDuration === 30 ? 10000 : 20000;
+    room.endsAt = Math.min(room.endsAt + extensionMs, now + timerMs);
 
     room.bidHistory.unshift({
       id: now,
@@ -172,7 +174,7 @@ export async function GET(
       room.playerIdx = 0;
       room.currentBid = room.players[0]?.base || 50;
       room.currentBidder = null;
-      room.endsAt = Date.now() + BID_TIMER_MS;
+      room.endsAt = Date.now() + ((room.timerDuration || 60) * 1000);
       modified = true;
     }
 

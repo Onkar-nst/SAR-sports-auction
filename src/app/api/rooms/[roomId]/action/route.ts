@@ -47,7 +47,7 @@ export async function POST(
         room.playerIdx = 0;
         room.currentBid = room.players[0].base;
         room.currentBidder = null;
-        room.endsAt = now + BID_TIMER_MS;
+        room.endsAt = now + ((room.timerDuration || 60) * 1000);
 
         await saveRoom(room);
         break;
@@ -84,8 +84,10 @@ export async function POST(
           return NextResponse.json({ error: 'Insufficient budget' }, { status: 400 });
         }
 
-        // Calculate new timer (extend but cap at BID_TIMER_MS from now)
-        const newEndsAt = Math.min((room.endsAt || now) + BID_EXTENSION_MS, now + BID_TIMER_MS);
+        // Calculate new timer (extend but cap at room.timerDuration from now)
+        const timerMs = (room.timerDuration || 60) * 1000;
+        const extensionMs = room.timerDuration === 30 ? 10000 : 20000;
+        const newEndsAt = Math.min((room.endsAt || now) + extensionMs, now + timerMs);
 
         // Mutate room state safely in memory
         room.currentBid = nextBidVal;
@@ -113,6 +115,28 @@ export async function POST(
         // Use the saveRoom pattern for chat to ensure user mapping is handled correctly by db.ts
         room.chat.push({ id: now, user: user || 'Guest', msg: msg.trim() });
         room.chat = room.chat.slice(-60);
+        await saveRoom(room);
+        
+        const timeLeft = room.endsAt ? Math.max(0, Math.ceil((room.endsAt - Date.now()) / 1000)) : 60;
+        return NextResponse.json({ room: { ...room, timeLeft } });
+      }
+
+      // ─────────────────────────────────────────────────────────────────
+      // RENAME_TEAM: Host renames a team
+      // ─────────────────────────────────────────────────────────────────
+      case 'RENAME_TEAM': {
+        const { targetTeamId, newName } = action;
+        if (room.hostId !== userId) {
+          return NextResponse.json({ error: 'Only the host can rename teams' }, { status: 403 });
+        }
+        if (!newName || !newName.trim()) {
+          return NextResponse.json({ error: 'Team name cannot be empty' }, { status: 400 });
+        }
+        const team = room.participants.find((p: any) => p.id === targetTeamId);
+        if (!team) {
+          return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+        }
+        team.name = newName.trim();
         await saveRoom(room);
         
         const timeLeft = room.endsAt ? Math.max(0, Math.ceil((room.endsAt - Date.now()) / 1000)) : 60;
